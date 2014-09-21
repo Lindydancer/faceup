@@ -1,7 +1,7 @@
-# faceup - Regression test system font-lock rules
+# faceup - Regression test system for font-lock
 
 *Author:* Anders Lindgren<br>
-*Version:* 0.0.1<br>
+*Version:* 0.0.2<br>
 *URL:* [https://github.com/Lindydancer/faceup](https://github.com/Lindydancer/faceup)<br>
 
 Emacs is capable of highlighting buffers based on language-specific

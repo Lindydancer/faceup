@@ -1,9 +1,9 @@
-;;; faceup.el --- Regression test system font-lock rules
+;;; faceup.el --- Regression test system for font-lock
 
-;; Copyright (C) 2013 Anders Lindgren
+;; Copyright (C) 2013,2014 Anders Lindgren
 
 ;; Author: Anders Lindgren
-;; Version: 0.0.1
+;; Version: 0.0.2
 ;; Created: 2013-01-21
 ;; Keywords: faces languages
 ;; URL: https://github.com/Lindydancer/faceup
