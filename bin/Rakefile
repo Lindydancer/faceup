@@ -10,5 +10,10 @@ end
 
 desc "Generating html"
 task "html" => ["readme"] do
-  sh "Markdown.pl ../README.md > README.html"
+  File.open(File.join("..", "README.html"), "w") do |fh|
+    fh.puts("<head>")
+    fh.puts("  <meta charset=\"UTF-8\">")
+    fh.puts("</head>")
+  end
+  sh "Markdown.pl ../README.md >> ../README.html"
 end

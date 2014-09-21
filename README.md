@@ -1,85 +1,204 @@
-# faceup - Markup language and regression test system for text with faces
+# faceup - Regression test system font-lock rules
 
 *Author:* Anders Lindgren<br>
-*Version:* 0.0.0<br>
+*Version:* 0.0.1<br>
+*URL:* [https://github.com/Lindydancer/faceup](https://github.com/Lindydancer/faceup)<br>
 
-The `faceup` markup language is a plain text representation of text
-with "face" information.
+Emacs is capable of highlighting buffers based on language-specific
+`font-lock` rules. This package, `faceup`, makes it possible to
+perform regression test for packages that provide font-lock rules.
 
-## This module provides functions for
+The underlying idea is to convert text with highlights ("faces")
+into a plain text representation using the Faceup markup language.
+By comparing the current highlight with a highlight performed with
+earlier versions of a package, it's possible to find problems that
+otherwise would have been hard to spot.
 
-* Converting text with face properties into the faceup
-  plain-text representation
-* Rendering the faceup representation as text with real face
-  properties
-* regression testing of text with "face" properties, both generic
-  and `font-lock` specific.
+The `faceup` package is designed to be used in conjunction with
+Ert, the standard Emacs regression test system.
 
-## Usage
+The Faceup markup language is a generic markup language, regression
+testing is merely one way to use it.
 
-Place this file in the load path and add the following to an
-appropriate init file, like ~/.emacs:
+## Installation
 
-    (autoload 'faceup-write-file    "faceup" nil t)
-    (autoload 'faceup-view-buffer   "faceup" nil t)
-    (autoload 'faceup-clean-buffer  "faceup" nil t)
-    (autoload 'faceup-render-buffer "faceup" nil t)
+This package is designed to be installed with the Emacs built-in
+package manager.
 
-## Regression test support
+## Regression test examples
 
-This module provides support for regression tests of font-lock
-packages.
+This section describes the two typical ways regression testing with
+this package is performed.
 
-Test rules are typically defined using a regression testing
-framework like `ert` which is part of the Emacs distribution.
+### Full source file highlighting
 
-### The following functions are available
+The most straight-forward way to perform regression testing is to
+collect a number of representative source files. From each source
+file, say `alpha.mylang`, you can use <kbd>M-x faceup-write-file RET</kbd>
+to generate a Faceup file named `alpha.mylang.faceup`, this file
+use the Faceup markup language to represent the text with
+highlights and is used as a reference in future tests.
 
-    (faceup-test-font-lock-string mode faceup)
+An Ert test case can be defined as follows:
 
-  Verifies that `faceup` (when stripped of the `faceup` markup) is
-  fontifies as described by `faceup` in major mode `mode`. This is
-  typically used form small hand-crafted examples to ensure that
-  they are fontified correctly.
+       (require 'faceup)
 
-    (faceup-test-font-lock-file mode file)
+       (defvar mylang-font-lock-test-dir (faceup-this-file-directory))
 
-  Verify that `file` is fontified as the facit file `file.faceup`
-  for major mode `mode`. This is typically used for large,
-  complete, source files to ensure that changes in font-lock rules
-  do not affect the fontification.
+       (defun mylang-font-lock-test-apps (file)
+         "Test that the mylang FILE is fontifies as the .faceup file describes."
+         (faceup-test-font-lock-file 'mylang-mode
+                                     (concat mylang-font-lock-test-dir file)))
+       (faceup-defexplainer mylang-font-lock-test-apps)
 
-## The `faceup` markup language
+       (ert-deftest mylang-font-lock-file-test ()
+         (should (mylang-font-lock-test-apps "apps/FirstApp/alpha.mylang"))
+         ;; ... Add more test files here ...
+         )
 
-The `faceup` markup language is designed to be human-readable and
+To execute the tests simply run something like <kbd>M-x ert RET t RET</kbd>.
+
+### Source snippets
+
+To test smaller snippets of code, you can use the
+`faceup-test-font-lock-string`. It takes a major mode and a string
+written using the Faceup markup language. The functions strips away
+the Faceup markup, inserts the plain text into a temporary buffer,
+highlights it, converts the result back into the Faceup markup
+language, and finally compares the result with the original Faceup
+string.
+
+For example:
+
+       (defun mylang-font-lock-test (faceup)
+         (faceup-test-font-lock-string 'mylang-mode faceup))
+       (faceup-defexplainer mylang-font-lock-test)
+
+       (ert-deftest mylang-font-lock-test-simple ()
+         "Simple MyLang font-lock tests."
+         (should (mylang-font-lock-test "Â«k:thisÂ» is a keyword"))
+         (should (mylang-font-lock-test "Â«k:functionÂ» Â«f:myfuncÂ» (Â«v:varÂ»)")))
+
+
+## Executing the tests
+
+Once the tests have been defined, you can use <kbd>M-x ert RET t RET</kbd>
+to execute them. Hopefully, you will be given the "all clear".
+However, if there is a problem, you will be presented with
+something like:
+
+    F mylang-font-lock-file-test
+        (ert-test-failed
+         ((should
+           (mylang-font-lock-test-apps "apps/FirstApp/alpha.mylang"))
+          :form
+          (mylang-font-lock-test-apps "apps/FirstApp/alpha.mylang")
+          :value nil :explanation
+          ((on-line 2
+    		("but_Â«k:thisÂ»_is_not_a_keyword")
+    		("but_this_is_not_a_keyword")))))
+
+You should read this that on line 2, the old font-lock rules
+highlighted `this` inside `but_this_is_not_a_keyword` (which is
+clearly wrong), whereas the new doesn't. Of course, if this is the
+desired result (for example, the result of a recent change) you can
+simply regenerate the .faceup file and store it as the reference
+file for the future.
+
+## The Faceup markup language
+
+The Faceup markup language is designed to be human-readable and
 minimalistic.
 
-The two special characters `«` and `»` are used to indicate the
+The two special characters `Â«` and `Â»` are used to indicate the
 start and end of a section containing a specific face. The start
 marker contains information about the face. A number of faces have
-a shorthand notation, e.g. `«U:abc»` means that the text "abc" is
+a shorthand notation, e.g. `Â«U:abcÂ»` means that the text "abc" is
 underlined. Other faces are expressed with their full name, e.g.
-`«:my-face:abc»`.
+`Â«:my-face:abcÂ»`.
 
 If more than one face is present at the same location, faceup
 represents this as nested marks, where the foremost face is the
 inner one, in the faceup representation.
 
-For example, if the text "abcDEFghi" is in "warning" face and the
-"DEF" substring is underlined, this is represented as
-`«W:abc«U:DEF»ghi»`.
+For example, if the text `abcDEFghi` is in *warning* face and the
+`DEF` substring is *underlined*, this is represented as
+`Â«W:abcÂ«U:DEFÂ»ghiÂ»`.
 
 In case the use of faces do not nest, the ranges will be split when
-represented in `faceup`. Concretely, consider the string,
-"abcdefghi", where "abcdef" are bold and "defghi" underlined. In
-case, the latter is foremost, it will be represented in `faceup` as
-`«B:abc«U:def»»«U:ghi»`
+represented in Faceup. Concretely, consider the string `abcdefghi`
+where `abcdef` are bold and `defghi` underlined. In case it will be
+represented in Faceup as `Â«B:abcÂ«U:defÂ»Â»Â«U:ghiÂ»`
 
 Any occurrence of the start or end markers in the original text will
 be "escaped" using the start marker in the `faceup` representation.
-In other words, the sequences `««` and `«»` represent a start or
+In other words, the sequences `Â«Â«` and `Â«Â»` represent a start and
 end marker, respectively.
+
+### Limitations
+
+Faceup only supports the `face` attribute. (Some font-lock packages
+set other attributes like `help-echo`.)
+
+Faceup supports only named faces. It does not support face
+properties where colors or attributes are used directly.
+
+## Reference section
+
+### Faceup commands and functions
+
+<kbd>M-x faceup-write-file RET</kbd> - generate a Faceup file based on the
+current buffer.
+
+<kbd>M-x faceup-view-file RET</kbd> - view the current buffer converted to
+Faceup.
+
+`faceup-markup-{string,buffer}` - convert text with face properties
+to the Faceup markup language.
+
+`faceup-render-{string,buffer,buffer-to-string}` - convert a text
+with Faceup markup to a text with face properties.
+
+`faceup-clean-{buffer,string}` - remove Faceup markup.
+
+### Regression test support
+
+The following functions can be used as Ert test functions, or can
+be used to implement new Ert test functions.
+
+`faceup-test-equal` - Test function, work like Ert:s `equal`, but
+more ergonomically when reporting multi-line string errors.
+Concretely, it breaks down multi-line strings into lines and
+reports which line number the error occurred on and the content of
+that line.
+
+`faceup-test-font-lock-buffer` - Test that a buffer is highlighted
+according to a reference Faceup text, for a specific major mode.
+
+`faceup-test-font-lock-string` - Test that a text with Faceup
+markup is refontified to match the original Faceup markup.
+
+`faceup-test-font-lock-file` - Test that a file is highlighted
+according to a reference .faceup file.
+
+`faceup-defexplainer` - Macro, define an explainer function and set
+the `ert-explainer` property on the original function, for
+functions based on the above test functions.
+
+`faceup-this-file-directory` - Macro, the directory of the current
+file.
+
+## Real-world examples
+
+The following are examples of real-world package that use faceup to
+test their font-lock keywords.
+
+* [cmake-font-lock](https://github.com/Lindydancer/cmake-font-lock)
+  an advanced set of font-lock keywords for the CMake language
+* [objc-font-lock](https://github.com/Lindydancer/objc-font-lock)
+  highlight Objective-C function calls.
+
 
 
 ---
-Converted from `faceup.el` by *el2markup*.
+Converted from `faceup.el` by [*el2markdown*](https://github.com/Lindydancer/el2markdown).

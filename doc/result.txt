@@ -1,0 +1,25 @@
+Selector: t
+Passed:  0
+Failed:  1 (1 unexpected)
+Skipped: 0
+Total:   1/1
+
+Started at:   2014-09-19 15:17:07+0200
+Finished.
+Finished at:  2014-09-19 15:17:07+0200
+
+F
+
+F mylang-font-lock-file-test
+    (ert-test-failed
+     ((should
+       (mylang-font-lock-test-apps "apps/FirstApp/alpha.mylang"))
+      :form
+      (mylang-font-lock-test-apps "apps/FirstApp/alpha.mylang")
+      :value nil :explanation
+      ((on-line 1
+		("«k:this» is a keyword")
+		("«k:this» «k:is» a keyword"))
+       (on-line 2
+		("and_«k:this»_should_not_be_a_keyword")
+		("and_this_should_not_be_a_keyword")))))

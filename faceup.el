@@ -1,11 +1,12 @@
-;; faceup.el -- Markup language and regression test system for text with faces.
+;;; faceup.el --- Regression test system font-lock rules
 
 ;; Copyright (C) 2013 Anders Lindgren
 
 ;; Author: Anders Lindgren
-;; Version: 0.0.0
+;; Version: 0.0.1
 ;; Created: 2013-01-21
 ;; Keywords: faces languages
+;; URL: https://github.com/Lindydancer/faceup
 
 ;; This program is free software: you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -22,92 +23,212 @@
 
 ;;; Commentary:
 
-;; The `faceup' markup language is a plain text representation of text
-;; with "face" information.
+;; Emacs is capable of highlighting buffers based on language-specific
+;; `font-lock' rules. This package, `faceup', makes it possible to
+;; perform regression test for packages that provide font-lock rules.
 ;;
-;; This module provides functions for:
+;; The underlying idea is to convert text with highlights ("faces")
+;; into a plain text representation using the Faceup markup language.
+;; By comparing the current highlight with a highlight performed with
+;; earlier versions of a package, it's possible to find problems that
+;; otherwise would have been hard to spot.
 ;;
-;; * Converting text with face properties into the faceup
-;;   plain-text representation
+;; The `faceup' package is designed to be used in conjunction with
+;; Ert, the standard Emacs regression test system.
 ;;
-;; * Rendering the faceup representation as text with real face
-;;   properties
-;;
-;; * regression testing of text with "face" properties, both generic
-;;   and `font-lock' specific.
+;; The Faceup markup language is a generic markup language, regression
+;; testing is merely one way to use it.
 
-;; Usage:
+;; Installation:
 ;;
-;; Place this file in the load path and add the following to an
-;; appropriate init file, like ~/.emacs:
-;;
-;; (autoload 'faceup-write-file    "faceup" nil t)
-;; (autoload 'faceup-view-buffer   "faceup" nil t)
-;; (autoload 'faceup-clean-buffer  "faceup" nil t)
-;; (autoload 'faceup-render-buffer "faceup" nil t)
+;; This package is designed to be installed with the Emacs built-in
+;; package manager.
 
-;; Regression test support:
+;; Regression test examples:
 ;;
-;; This module provides support for regression tests of font-lock
-;; packages.
+;; This section describes the two typical ways regression testing with
+;; this package is performed.
 ;;
-;; Test rules are typically defined using a regression testing
-;; framework like `ert' which is part of the Emacs distribution.
 ;;
-;; The following functions are available:
+;; Full source file highlighting:
 ;;
-;; (faceup-test-font-lock-string mode faceup)
+;; The most straight-forward way to perform regression testing is to
+;; collect a number of representative source files. From each source
+;; file, say `alpha.mylang', you can use `M-x faceup-write-file RET'
+;; to generate a Faceup file named `alpha.mylang.faceup', this file
+;; use the Faceup markup language to represent the text with
+;; highlights and is used as a reference in future tests.
 ;;
-;;   Verifies that `faceup' (when stripped of the `faceup' markup) is
-;;   fontifies as described by `faceup' in major mode `mode'. This is
-;;   typically used form small hand-crafted examples to ensure that
-;;   they are fontified correctly.
+;; An Ert test case can be defined as follows:
 ;;
-;; (faceup-test-font-lock-file mode file)
+;;    (require 'faceup)
 ;;
-;;   Verify that `file' is fontified as the facit file `file.faceup'
-;;   for major mode `mode'. This is typically used for large,
-;;   complete, source files to ensure that changes in font-lock rules
-;;   do not affect the fontification.
+;;    (defvar mylang-font-lock-test-dir (faceup-this-file-directory))
+;;
+;;    (defun mylang-font-lock-test-apps (file)
+;;      "Test that the mylang FILE is fontifies as the .faceup file describes."
+;;      (faceup-test-font-lock-file 'mylang-mode
+;;                                  (concat mylang-font-lock-test-dir file)))
+;;    (faceup-defexplainer mylang-font-lock-test-apps)
+;;
+;;    (ert-deftest mylang-font-lock-file-test ()
+;;      (should (mylang-font-lock-test-apps "apps/FirstApp/alpha.mylang"))
+;;      ;; ... Add more test files here ...
+;;      )
+;;
+;; To execute the tests simply run something like `M-x ert RET t RET'.
+;;
+;;
+;; Source snippets:
+;;
+;; To test smaller snippets of code, you can use the
+;; `faceup-test-font-lock-string'. It takes a major mode and a string
+;; written using the Faceup markup language. The functions strips away
+;; the Faceup markup, inserts the plain text into a temporary buffer,
+;; highlights it, converts the result back into the Faceup markup
+;; language, and finally compares the result with the original Faceup
+;; string.
+;;
+;; For example:
+;;
+;;    (defun mylang-font-lock-test (faceup)
+;;      (faceup-test-font-lock-string 'mylang-mode faceup))
+;;    (faceup-defexplainer mylang-font-lock-test)
+;;
+;;    (ert-deftest mylang-font-lock-test-simple ()
+;;      "Simple MyLang font-lock tests."
+;;      (should (mylang-font-lock-test "«k:this» is a keyword"))
+;;      (should (mylang-font-lock-test "«k:function» «f:myfunc» («v:var»)")))
+;;
 
-;; The `faceup' markup language:
+;; Executing the tests:
 ;;
-;; The `faceup' markup language is designed to be human-readable and
+;; Once the tests have been defined, you can use `M-x ert RET t RET'
+;; to execute them. Hopefully, you will be given the "all clear".
+;; However, if there is a problem, you will be presented with
+;; something like:
+;;
+;;     F mylang-font-lock-file-test
+;;         (ert-test-failed
+;;          ((should
+;;            (mylang-font-lock-test-apps "apps/FirstApp/alpha.mylang"))
+;;           :form
+;;           (mylang-font-lock-test-apps "apps/FirstApp/alpha.mylang")
+;;           :value nil :explanation
+;;           ((on-line 2
+;;     		("but_«k:this»_is_not_a_keyword")
+;;     		("but_this_is_not_a_keyword")))))
+;;
+;; You should read this that on line 2, the old font-lock rules
+;; highlighted `this' inside `but_this_is_not_a_keyword' (which is
+;; clearly wrong), whereas the new doesn't. Of course, if this is the
+;; desired result (for example, the result of a recent change) you can
+;; simply regenerate the .faceup file and store it as the reference
+;; file for the future.
+
+;; The Faceup markup language:
+;;
+;; The Faceup markup language is designed to be human-readable and
 ;; minimalistic.
 ;;
-;; The two special characters `�' and `�' are used to indicate the
+;; The two special characters `«' and `»' are used to indicate the
 ;; start and end of a section containing a specific face. The start
 ;; marker contains information about the face. A number of faces have
-;; a shorthand notation, e.g. `�U:abc�' means that the text "abc" is
+;; a shorthand notation, e.g. `«U:abc»' means that the text "abc" is
 ;; underlined. Other faces are expressed with their full name, e.g.
-;; `�:my-face:abc�'.
+;; `«:my-face:abc»'.
 ;;
 ;; If more than one face is present at the same location, faceup
 ;; represents this as nested marks, where the foremost face is the
 ;; inner one, in the faceup representation.
 ;;
-;; For example, if the text "abcDEFghi" is in "warning" face and the
-;; "DEF" substring is underlined, this is represented as
-;; `�W:abc�U:DEF�ghi�'.
+;; For example, if the text `abcDEFghi' is in *warning* face and the
+;; `DEF' substring is *underlined*, this is represented as
+;; `«W:abc«U:DEF»ghi»'.
 ;;
 ;; In case the use of faces do not nest, the ranges will be split when
-;; represented in `faceup'. Concretely, consider the string,
-;; "abcdefghi", where "abcdef" are bold and "defghi" underlined. In
-;; case, the latter is foremost, it will be represented in `faceup' as
-;; `�B:abc�U:def���U:ghi�'
+;; represented in Faceup. Concretely, consider the string `abcdefghi'
+;; where `abcdef' are bold and `defghi' underlined. In case it will be
+;; represented in Faceup as `«B:abc«U:def»»«U:ghi»'
 ;;
 ;; Any occurrence of the start or end markers in the original text will
 ;; be "escaped" using the start marker in the `faceup' representation.
-;; In other words, the sequences `��' and `��' represent a start or
+;; In other words, the sequences `««' and `«»' represent a start and
 ;; end marker, respectively.
+;;
+;; Limitations:
+;;
+;; Faceup only supports the `face' attribute. (Some font-lock packages
+;; set other attributes like `help-echo'.)
+;;
+;; Faceup supports only named faces. It does not support face
+;; properties where colors or attributes are used directly.
+
+;; Reference section:
+;;
+;; Faceup commands and functions:
+;;
+;; `M-x faceup-write-file RET' - generate a Faceup file based on the
+;; current buffer.
+;;
+;; `M-x faceup-view-file RET' - view the current buffer converted to
+;; Faceup.
+;;
+;; `faceup-markup-{string,buffer}' - convert text with face properties
+;; to the Faceup markup language.
+;;
+;; `faceup-render-{string,buffer,buffer-to-string}' - convert a text
+;; with Faceup markup to a text with face properties.
+;;
+;; `faceup-clean-{buffer,string}' - remove Faceup markup.
+;;
+;; 
+;; Regression test support:
+;;
+;; The following functions can be used as Ert test functions, or can
+;; be used to implement new Ert test functions.
+;;
+;; `faceup-test-equal' - Test function, work like Ert:s `equal', but
+;; more ergonomically when reporting multi-line string errors.
+;; Concretely, it breaks down multi-line strings into lines and
+;; reports which line number the error occurred on and the content of
+;; that line.
+;;
+;; `faceup-test-font-lock-buffer' - Test that a buffer is highlighted
+;; according to a reference Faceup text, for a specific major mode.
+;;
+;; `faceup-test-font-lock-string' - Test that a text with Faceup
+;; markup is refontified to match the original Faceup markup.
+;;
+;; `faceup-test-font-lock-file' - Test that a file is highlighted
+;; according to a reference .faceup file.
+;;
+;; `faceup-defexplainer' - Macro, define an explainer function and set
+;; the `ert-explainer' property on the original function, for
+;; functions based on the above test functions.
+;;
+;; `faceup-this-file-directory' - Macro, the directory of the current
+;; file.
+
+;; Real-world examples:
+;;
+;; The following are examples of real-world package that use faceup to
+;; test their font-lock keywords.
+;;
+;; * [cmake-font-lock](https://github.com/Lindydancer/cmake-font-lock)
+;;   an advanced set of font-lock keywords for the CMake language
+;;
+;; * [objc-font-lock](https://github.com/Lindydancer/objc-font-lock)
+;;   highlight Objective-C function calls.
+;;
 
 ;;; Code:
 
 (eval-when-compile
   (require 'cl))
 
-(defvar faceup-markup-start-char 171)
-(defvar faceup-markup-end-char   187)
+(defvar faceup-markup-start-char 171)   ;; «
+(defvar faceup-markup-end-char   187)   ;; »
 
 (defvar faceup-face-short-alist
   '(;; Generic faces (uppercase letters)
@@ -138,21 +259,22 @@
   "Alist from faces to one-character representation.")
 
 
-;; Plain: <W....>
-;; Nested: <W...<W...>>
+;; Plain: «W....»
+;; Nested: «W...«W...»»
 
 ;; Overlapping:   xxxxxxxxxx
 ;;                    yyyyyyyyyyyy
-;;                <X..<Y..>><Y...>
+;;                «X..«Y..»»«Y...»
 
 
 (defun faceup-markup-string (s)
-  "Return the faceup version of the string `s'."
+  "Return the faceup version of the string S."
   (with-temp-buffer
     (insert s)
     (faceup-markup-buffer)))
 
 
+;;;###autoload
 (defun faceup-view-buffer ()
   "Display the faceup representation of the selected buffer."
   (interactive)
@@ -163,8 +285,9 @@
     (display-buffer buffer)))
 
 
+;;;###autoload
 (defun faceup-write-file (&optional file-name)
-  "Save the faceup representation of the current buffer to a file.
+  "Save the faceup representation of the current buffer to the file FILE-NAME.
 
 Unless a name is given, the file will be named xxx.faceup, where
 xxx is the file name associated with the buffer."
@@ -204,9 +327,10 @@ xxx is the file name associated with the buffer."
 ;; should treat the inner group of nested ranges the upper (i.e. the
 ;; one towards the front.) For example:
 ;;
-;;     <f:aaaaaaa<U:xxxx>aaaaaa>
+;;     «f:aaaaaaa«U:xxxx»aaaaaa»
 
 (defun faceup-copy-and-quote (start end to-buffer)
+  "Quote and insert the text between START and END into TO-BUFFER"
   (let ((not-markup (concat "^"
                             (make-string 1 faceup-markup-start-char)
                             (make-string 1 faceup-markup-end-char))))
@@ -227,7 +351,7 @@ xxx is the file name associated with the buffer."
           (forward-char))))))
 
 (defun faceup-markup-to-buffer (to-buffer &optional buffer)
-  "Convert content of `buffer' to faceup form in `to-buffer'."
+  "Convert content of BUFFER to faceup form and insert in TO-BUFFER."
   (save-excursion
     (if buffer
         (set-buffer buffer))
@@ -298,9 +422,9 @@ xxx is the file name associated with the buffer."
 
 
 (defun faceup-next-face-property-change (pos)
-  "Next position after `pos' where the `face' property change.
+  "Next position after POS where the `face' property change.
 
-If `pos' is `nil', also include `point-min' in the search.
+If POS is nil, also include `point-min' in the search.
 If last character contains a face property, return `point-max'."
   (if (equal pos (point-max))
       ;; Last search returned `point-max'. There is no more to search
@@ -336,14 +460,15 @@ If last character contains a face property, return `point-max'."
 ;; with real face properties.
 
 (defun faceup-render-string (faceup)
-  "Return string with face properties as described by `faceup'."
+  "Return string with face properties from FACEUP written with Faceup markup."
   (with-temp-buffer
     (insert faceup)
     (faceup-render-buffer-to-string (current-buffer))))
 
 
+;;;###autoload
 (defun faceup-render-buffer (&optional buffer)
-  "Convert the faceup markup to a buffer with real face properties."
+  "Convert BUFFER containing Faceup markup to a new buffer and display it."
   (interactive)
   (unless buffer
     (setq buffer (current-buffer)))
@@ -356,9 +481,8 @@ If last character contains a face property, return `point-max'."
 
 
 (defun faceup-render-buffer-to-string (buffer)
-  "Convert a buffer containing faceup markup to a string with faces."
-  (save-excursion
-    (set-buffer buffer)
+  "Convert BUFFER containing faceup markup to a string with faces."
+  (with-current-buffer buffer
     (goto-char (point-min))
     (let ((res "")
           (last-point (point))
@@ -384,7 +508,7 @@ If last character contains a face property, return `point-max'."
                                                 text)))
                      (setq res (concat res text))
                      (setq last-point (point))))
-                (not (eobp)))
+               (not (eobp)))
         (if (equal (following-char) faceup-markup-start-char)
             ;; Start marker.
             (progn
@@ -421,6 +545,7 @@ If last character contains a face property, return `point-max'."
 
 ;; ----------------------------------------------------------------------
 
+;;;###autoload
 (defun faceup-clean-buffer ()
   "Remove faceup markup from buffer."
   (interactive)
@@ -492,9 +617,9 @@ of `faceup-test-equal', and other functions that adhere to this
 variable, can easily define their own explainer functions.")
 
 (defmacro faceup-defexplainer (function)
-  "Defines an `ert' explainer function for `function'.
+  "Defines an Ert explainer function for FUNCTION.
 
-`function' must return an explanation when the test fails and
+FUNCTION must return an explanation when the test fails and
 `faceup-test-explain' is set."
   (let ((name (intern (concat (symbol-name function) "-explainer"))))
     `(progn
@@ -509,11 +634,11 @@ variable, can easily define their own explainer functions.")
 ;;
 
 (defun faceup-test-equal (lhs rhs)
-  "Compares two (multi-line) strings for equality.
+  "Compares two (multi-line) strings, LHS and RHS, for equality.
 
-This is intended to be used in the `ert' regression test rules.
+This is intended to be used in Ert regression test rules.
 
-When `faceup-test-explain' is non-nil, instead of returning `nil'
+When `faceup-test-explain' is non-nil, instead of returning nil
 on inequality, a list is returned with a explanation what
 differs. Currently, this function reports 1) if the number of
 lines in the strings differ. 2) the lines and the line numbers on
@@ -574,11 +699,11 @@ When used in an `ert' rule, the output is as below:
 ;;
 
 (defun faceup-test-font-lock-buffer (mode faceup &optional buffer)
-  "Verify that `buffer' is fontified as `faceup' for major mode `mode'.
+  "Verify that BUFFER is fontified as FACEUP for major mode MODE.
 
-If `buffer' is not specified the current buffer is used.
+If BUFFER is not specified the current buffer is used.
 
-Note that the major mode of the buffer is set to `mode' and that
+Note that the major mode of the buffer is set to MODE and that
 the buffer is fontified."
   (save-excursion
     (if buffer
@@ -592,9 +717,9 @@ the buffer is fontified."
 
 
 (defun faceup-test-font-lock-string (mode faceup)
-  "True if `faceup' is re-fontified as the faceup markup for major mode `mode'.
+  "True if FACEUP is re-fontified as the faceup markup for major mode MODE.
 
-The string `faceup' is stripped from markup, inserted into a
+The string FACEUP is stripped from markup, inserted into a
 buffer, the requested major mode activated, the buffer is
 fontified, the result is again converted to the faceup form, and
 compared with the original string."
@@ -607,7 +732,7 @@ compared with the original string."
 
 
 (defun faceup-test-font-lock-file (mode file)
-  "Verify that `file' is fontified as `file.faceup' for major mode `mode'."
+  "Verify that FILE is fontified as FILE.faceup for major mode MODE."
   (let ((faceup (with-temp-buffer
                   (insert-file-contents (concat file ".faceup"))
                   (buffer-substring-no-properties (point-min) (point-max)))))
@@ -618,24 +743,26 @@ compared with the original string."
 (faceup-defexplainer faceup-test-font-lock-file)
 
 
-;; ----------------------------------------------------------------------
-;; Convenience functions
+;; ------------------------------
+;; Get current file directory. Test cases can use this to locate test
+;; files.
 ;;
 
-
-(defun faceup-list-latin1 ()
-  (interactive)
-  (with-output-to-temp-buffer "*Latin1*"
-    (let ((i 0))
-      (while (< i 256)
-        (princ (format "%c" i))
-        (if (equal (% i 16) 0)
-            (princ "\n"))
-        (setq i (+ i 1))))))
-
+(defun faceup-this-file-directory ()
+  "The directory of the file where the call to this function is located in.
+Intended to be called when a file is loaded."
+  (expand-file-name
+   (if load-file-name
+       ;; File is being loaded.
+       (file-name-directory load-file-name)
+     ;; File is being evaluated using, for example, `eval-buffer'.
+     default-directory)))
 
 
+;; ----------------------------------------------------------------------
+;; The end
+;;
 
 (provide 'faceup)
 
-;; faceup.el ends here.
+;;; faceup.el ends here
