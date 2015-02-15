@@ -1,9 +1,9 @@
 ;;; faceup.el --- Regression test system for font-lock
 
-;; Copyright (C) 2013,2014 Anders Lindgren
+;; Copyright (C) 2013-2015 Anders Lindgren
 
 ;; Author: Anders Lindgren
-;; Version: 0.0.2
+;; Version: 0.0.3
 ;; Created: 2013-01-21
 ;; Keywords: faces languages
 ;; URL: https://github.com/Lindydancer/faceup
@@ -131,38 +131,94 @@
 ;; The Faceup markup language is designed to be human-readable and
 ;; minimalistic.
 ;;
-;; The two special characters `«' and `»' are used to indicate the
-;; start and end of a section containing a specific face. The start
-;; marker contains information about the face. A number of faces have
-;; a shorthand notation, e.g. `«U:abc»' means that the text "abc" is
-;; underlined. Other faces are expressed with their full name, e.g.
-;; `«:my-face:abc»'.
+;; The two special characters `«' and `»' marks the start and end of a
+;; range of a face.
 ;;
-;; If more than one face is present at the same location, faceup
-;; represents this as nested marks, where the foremost face is the
-;; inner one, in the faceup representation.
 ;;
-;; For example, if the text `abcDEFghi' is in *warning* face and the
-;; `DEF' substring is *underlined*, this is represented as
-;; `«W:abc«U:DEF»ghi»'.
+;; Compact format for special faces:
 ;;
-;; In case the use of faces do not nest, the ranges will be split when
-;; represented in Faceup. Concretely, consider the string `abcdefghi'
-;; where `abcdef' are bold and `defghi' underlined. In case it will be
-;; represented in Faceup as `«B:abc«U:def»»«U:ghi»'
+;; The compact format `«<LETTER>:text»' is used for a number of common
+;; faces. For example, `«U:abc»' means that the text `abc' is
+;; underlined.
 ;;
-;; Any occurrence of the start or end markers in the original text will
-;; be "escaped" using the start marker in the `faceup' representation.
-;; In other words, the sequences `««' and `«»' represent a start and
-;; end marker, respectively.
+;; See `faceup-face-short-alist' for the known faces and the
+;; corresponding letter.
 ;;
-;; Limitations:
 ;;
-;; Faceup only supports the `face' attribute. (Some font-lock packages
-;; set other attributes like `help-echo'.)
+;; Full format:
 ;;
-;; Faceup supports only named faces. It does not support face
-;; properties where colors or attributes are used directly.
+;; The format `«:<NAME OF FACE>:text»' is used use to encode other
+;; faces.
+;;
+;; For example `«:my-special-face:abc»' meanst that `abc' has the face
+;; `my-special-face'.
+;;
+;;
+;; Anonymous faces:
+;;
+;; An "anonymous face" is when the `face' property contains a property
+;; list (plist) on the form `(:key value)'. This is represented using
+;; a variant of the full format: `«:(:key value):text»'.
+;;
+;; For example, `«:(:background "red"):abc»' represent the text `abc'
+;; with a red background.
+;;
+;;
+;; Multiple properties:
+;;
+;; In case a text contains more than one face property, they are
+;; represented using nested sections.
+;;
+;; For example:
+;;
+;; * `«B:abc«U:def»»' represent the text `abcdef' that is both *bold*
+;;   and *underlined*.
+;;
+;; * `«W:abc«U:def»ghi»' represent the text `abcdefghi' where the
+;;   entire text is in *warning* face and `def' is *underlined*.
+;;
+;; In case two faces partially overlap, the ranges will be split when
+;; represented in Faceup. For example:
+;;
+;; * `«B:abc«U:def»»«U:ghi»' represent the text `abcdefghi' where
+;;   `abcdef' is bold and `defghi' is underlined.
+;;
+;;
+;; Escaping start and end markers:
+;;
+;; Any occurrence of the start or end markers in the original text
+;; will be escaped using the start marker in the Faceup
+;; representation. In other words, the sequences `««' and `«»'
+;; represent a start and end marker, respectively.
+;;
+;;
+;; Other properties:
+;;
+;; In addition to representing the `face' property (or, more
+;; correctly, the value of `faceup-default-property') other properties
+;; can be encoded. The variable `faceup-properties' contains a list of
+;; properties to track. If a property behaves like the `face'
+;; property, it is encoded as described above, with the addition of
+;; the property name placed in parentheses, for example:
+;; `«(my-face)U:abd»'.
+;;
+;; The variable `faceup-face-like-properties' contains a list of
+;; properties considered face-like.
+;;
+;; Properties that are not considered face-like are always encoded
+;; using the full format and the don't nest. For example:
+;; `«(my-fibonacci-property):(1 1 2 3 5 8):abd»'.
+;;
+;; Examples of properties that could be tracked are:
+;;
+;; * `font-lock-face' -- an alias to `face' when `font-lock-mode' is
+;;   enabled.
+;;
+;; * `syntax-table' -- used by a custom `syntax-propertize' to
+;;   override the default syntax table.
+;;
+;; * `help-echo' -- provides tooltip text displayed when the mouse is
+;;   held over a text.
 
 ;; Reference section:
 ;;
@@ -174,15 +230,22 @@
 ;; `M-x faceup-view-file RET' - view the current buffer converted to
 ;; Faceup.
 ;;
-;; `faceup-markup-{string,buffer}' - convert text with face properties
-;; to the Faceup markup language.
+;; `faceup-markup-{string,buffer}' - convert text with properties to
+;; the Faceup markup language.
 ;;
-;; `faceup-render-{string,buffer,buffer-to-string}' - convert a text
-;; with Faceup markup to a text with face properties.
+;; `faceup-render-view-buffer' - convert buffer with Faceup markup to
+;; a buffer with real text properties and display it.
 ;;
-;; `faceup-clean-{buffer,string}' - remove Faceup markup.
+;; `faceup-render-string' - return string with real text properties
+;; from a string with Faceup markup.
 ;;
-;; 
+;; `faceup-render-to-{buffer,string}' - convert buffer with Faceup
+;; markup to a buffer/string with real text properties.
+;;
+;; `faceup-clean-{buffer,string}' - remove Faceup markup from buffer
+;; or string.
+;;
+;;
 ;; Regression test support:
 ;;
 ;; The following functions can be used as Ert test functions, or can
@@ -226,6 +289,49 @@
 
 (eval-when-compile
   (require 'cl))
+
+
+(defvar faceup-default-property 'face
+  "The property that should be represented in Faceup without the (prop) part.")
+
+(defvar faceup-properties '(face)
+  "List of properties that should be converted to the Faceup format.
+
+Only face-like property use the short format. All other use the
+non-nesting full format. (See `faceup-face-like-properties'.)" )
+
+
+(defvar faceup-face-like-properties '(face font-lock-face)
+  "List of properties that behave like `face'.
+
+The following properties are assumed about face-like properties:
+
+* Elements are either symbols or property lists, or lists thereof.
+
+* A plain element and a list containing the same element are
+  treated as equal
+
+* Property lists and sequences of property lists are considered
+  equal. For example:
+
+     ((:underline t :foreground \"red\"))
+
+  and
+
+     ((:underline t) (:foreground \"red\"))
+
+Face-like properties are converted to faceup in a nesting fashion.
+
+For example, the string AAAXXXAAA (where the property `prop' has
+the value `(a)' on the A:s and `(a b)' on the X:s) is converted
+as follows, when treated as a face-like property:
+
+    «(prop):a:AAA«(prop):b:XXX»AAAA»
+
+When treated as a non-face-like property:
+
+    «(prop):(a):AAA»«(prop):(a b):XXX»«(prop):(a):AAA»")
+
 
 (defvar faceup-markup-start-char 171)   ;; «
 (defvar faceup-markup-end-char   187)   ;; »
@@ -308,7 +414,12 @@ xxx is the file name associated with the buffer."
       ;; Note: Must set `require-final-newline' inside
       ;; `with-temp-buffer', otherwise the value will be overridden by
       ;; the buffers local value.
-      (let ((require-final-newline nil))
+      ;;
+      ;; Clear `window-size-change-functions' as a workaround for
+      ;; Emacs bug#19576 (`write-file' saves the wrong buffer if a
+      ;; function in the list change current buffer).
+      (let ((require-final-newline nil)
+            (window-size-change-functions '()))
         (write-file file-name t)))))
 
 
@@ -350,6 +461,41 @@ xxx is the file name associated with the buffer."
               (insert next-char)))
           (forward-char))))))
 
+
+(defun faceup-reverse-list-and-split-property-lists (values)
+  "Reverse value, and pack :keyword value pairs in a list."
+  (let ((res '()))
+    (while values
+      (let ((value (pop values)))
+        (if (listp value)
+            (while value
+              (let ((key (pop value)))
+                ;; Note, missing value issue error!
+                (push (list key (pop value)) res)))
+          (push value res))))
+    res))
+
+
+(defun faceup-get-text-properties (pos)
+  "Alist of properties and values at pos.
+
+Face-like properties are normalized (single elements are
+converted to lists and property lists are split into short (KEY
+VALUE) lists)."
+  (let ((res '()))
+    (dolist (prop faceup-properties)
+      (let ((value (get-text-property pos prop)))
+        (when value
+          (when (memq prop faceup-face-like-properties)
+            ;; Normalize face-like properties.
+            (when (or (not (listp value))
+                      (or (keywordp (car value))))
+              (setq value (list value)))
+            (setq value (faceup-reverse-list-and-split-property-lists value)))
+          (push (cons prop value) res))))
+    res))
+
+
 (defun faceup-markup-to-buffer (to-buffer &optional buffer)
   "Convert content of BUFFER to faceup form and insert in TO-BUFFER."
   (save-excursion
@@ -362,40 +508,69 @@ xxx is the file name associated with the buffer."
         (font-lock-fontify-region (point-min) (point-max)))
     (let ((last-pos (point-min))
           (pos nil)
-          (state '()))                  ; List of faces.
-      (while
-          (progn
-            (setq pos (faceup-next-face-property-change pos))
-            pos)
+          ;; List of (prop . value), representing open faceup blocks.
+          (state '()))
+      (while (setq pos (faceup-next-property-change pos))
         ;; Insert content.
         (faceup-copy-and-quote last-pos pos to-buffer)
         (setq last-pos pos)
-        (let ((faces (get-text-property pos 'face)))
-          (unless (listp faces)
-            (setq faces (list faces)))
-          (let ((next-state faces))
-            ;; Let equal ranges live on.
-            (setq faces (reverse faces))
+        (let ((prop-values (faceup-get-text-properties pos)))
+          (let ((next-state '()))
             (setq state (reverse state))
-            (while (and state
-                        faces
-                        (equal (car state) (car faces)))
-              (pop faces)
-              (pop state))
-            ;; End faces that should not be included in the next state.
+            ;; Find all existing sequences that should continue.
+            (let ((cont t))
+              (while (and state
+                          prop-values
+                          cont)
+                (let* ((prop (car (car state)))
+                       (value (cdr (car state)))
+                       (pair (assq prop prop-values)))
+                  (if (memq prop faceup-face-like-properties)
+                      ;; Element by element.
+                      (if (equal value (car (cdr pair)))
+                          (setcdr pair (cdr (cdr pair)))
+                        (setq cont nil))
+                    ;; Full value.
+                    (if (equal value (cdr pair))
+                        (setq prop-values (delq pair prop-values))
+                      (setq cont nil))))
+                (when cont
+                  (push (pop state) next-state))))
+            ;; End values that should not be included in the next state.
             (while state
               (with-current-buffer to-buffer
                 (insert (make-string 1 faceup-markup-end-char)))
               (pop state))
             ;; Start new ranges.
-            (while faces
-              (with-current-buffer to-buffer
-                (insert (make-string 1 faceup-markup-start-char))
-                (let ((short (assq (car faces) faceup-face-short-alist)))
-                  (if short
-                      (insert (cdr short) ":")
-                    (insert ":" (symbol-name (car faces)) ":"))))
-              (pop faces))
+            (with-current-buffer to-buffer
+              (while prop-values
+                (let ((pair (pop prop-values)))
+                  (if (memq (car pair) faceup-face-like-properties)
+                      ;; Face-like.
+                      (dolist (element (cdr pair))
+                        (insert (make-string 1 faceup-markup-start-char))
+                        (unless (eq (car pair) faceup-default-property)
+                          (insert "(")
+                          (insert (symbol-name (car pair)))
+                          (insert "):"))
+                        (if (symbolp element)
+                            (let ((short
+                                   (assq element faceup-face-short-alist)))
+                              (if short
+                                  (insert (cdr short) ":")
+                                (insert ":" (symbol-name element) ":")))
+                          (insert ":")
+                          (prin1 element (current-buffer))
+                          (insert ":"))
+                        (push (cons (car pair) element) next-state))
+                    ;; Not face-like.
+                    (insert (make-string 1 faceup-markup-start-char))
+                    (insert "(")
+                    (insert (symbol-name (car pair)))
+                    (insert "):")
+                    (prin1 (cdr pair) (current-buffer))
+                    (insert ":")
+                    (push pair next-state)))))
             ;; Insert content.
             (setq state next-state))))
       ;; Insert whatever is left after the last face change.
@@ -421,32 +596,55 @@ xxx is the file name associated with the buffer."
 ;; Where DEF is drawn in "warning" face.
 
 
-(defun faceup-next-face-property-change (pos)
-  "Next position after POS where the `face' property change.
+(defun faceup-has-any-text-property (pos)
+  "True if any properties in `faceup-properties' are defined at POS."
+  (let ((res nil))
+    (dolist (prop faceup-properties)
+      (when (get-text-property pos prop)
+        (setq res t)))
+    res))
+
+
+(defun faceup-next-single-property-change (pos)
+  "Next position a property in `faceup-properties' changes, or nil."
+  (let ((res nil))
+    (dolist (prop faceup-properties)
+      (let ((next (next-single-property-change pos prop)))
+        (when next
+          (setq res (if res
+                        (min res next)
+                      next)))))
+    res))
+
+
+(defun faceup-next-property-change (pos)
+  "Next position after POS where one of the tracked properties change.
 
 If POS is nil, also include `point-min' in the search.
-If last character contains a face property, return `point-max'."
-  (if (equal pos (point-max))
+If last character contains a tracked property, return `point-max'.
+
+See `faceup-properties' for a list of tracked properties."
+  (if (eq pos (point-max))
       ;; Last search returned `point-max'. There is no more to search
       ;; for.
       nil
     (if (and (null pos)
-             (get-text-property (point-min) 'face))
+             (faceup-has-any-text-property (point-min)))
         ;; `pos' is `nil' and the character at `point-min' contains a
-        ;; face property, return `point-min'.
+        ;; tracked property, return `point-min'.
         (point-min)
       (unless pos
         ;; Start from the beginning.
         (setq pos (point-min)))
       ;; Do a normal search. Compensate for that
       ;; `next-single-property-change' does not include the end of the
-      ;; buffer, even when a face reach it.
-      (let ((res (next-single-property-change pos 'face)))
+      ;; buffer, even when a property reach it.
+      (let ((res (faceup-next-single-property-change pos)))
         (if (and (not res)              ; No more found.
-                 (not (equal pos (point-max))) ; Not already at the end.
-                 (not (equal (point-min) (point-max))) ; Not an empty buffer.
-                 (get-text-property (- (point-max) 1) 'face))
-            ;; If a face property goes all the way to the end of the
+                 (not (eq pos (point-max))) ; Not already at the end.
+                 (not (eq (point-min) (point-max))) ; Not an empty buffer.
+                 (faceup-has-any-text-property (- (point-max) 1)))
+            ;; If a property goes all the way to the end of the
             ;; buffer, return `point-max'.
             (point-max)
           res)))))
@@ -457,91 +655,123 @@ If last character contains a face property, return `point-max'."
 ;;
 
 ;; Functions to convert from the faceup textual representation to text
-;; with real face properties.
+;; with real properties.
 
 (defun faceup-render-string (faceup)
-  "Return string with face properties from FACEUP written with Faceup markup."
+  "Return string with properties from FACEUP written with Faceup markup."
   (with-temp-buffer
     (insert faceup)
-    (faceup-render-buffer-to-string (current-buffer))))
+    (faceup-render-to-string)))
 
 
 ;;;###autoload
-(defun faceup-render-buffer (&optional buffer)
+(defun faceup-render-view-buffer (&optional buffer)
   "Convert BUFFER containing Faceup markup to a new buffer and display it."
   (interactive)
-  (unless buffer
-    (setq buffer (current-buffer)))
-  (let ((text (faceup-render-buffer-to-string buffer)))
+  (with-current-buffer (or buffer (current-buffer))
     (let ((dest-buffer (get-buffer-create "*FaceUp rendering*")))
       (with-current-buffer dest-buffer
-        (delete-region (point-min) (point-max))
-        (insert text))
+        (delete-region (point-min) (point-max)))
+      (faceup-render-to-buffer dest-buffer)
       (display-buffer dest-buffer))))
 
 
-(defun faceup-render-buffer-to-string (buffer)
+(defun faceup-render-to-string (&optional buffer)
   "Convert BUFFER containing faceup markup to a string with faces."
-  (with-current-buffer buffer
+  (unless buffer
+    (setq buffer (current-buffer)))
+  (with-temp-buffer
+    (faceup-render-to-buffer (current-buffer) buffer)
+    (buffer-substring (point-min) (point-max))))
+
+
+(defun faceup-render-to-buffer (to-buffer &optional buffer)
+  "Convert BUFFER containing faceup markup into text with faces in TO-BUFFER."
+  (with-current-buffer (or buffer (current-buffer))
     (goto-char (point-min))
-    (let ((res "")
-          (last-point (point))
-          (state '())
+    (let ((last-point (point))
+          (state '())                   ; List of (prop . element)
           (not-markup (concat
                        "^"
                        (make-string 1 faceup-markup-start-char)
                        (make-string 1 faceup-markup-end-char))))
       (while (progn
                (skip-chars-forward not-markup)
-               (if (not (equal last-point (point)))
+               (if (not (eq last-point (point)))
                    (let ((text (buffer-substring-no-properties
-                                last-point (point))))
-                     (if state
+                                last-point (point)))
+                         (prop-elements-alist '()))
+                     ;; Accumulate all values for each property.
+                     (dolist (prop-element state)
+                       (let ((property (car prop-element))
+                             (element (cdr prop-element)))
+                         (let ((pair (assq property prop-elements-alist)))
+                           (unless pair
+                             (setq pair (cons property '()))
+                             (push pair prop-elements-alist))
+                           (push element (cdr pair)))))
+                     ;; Apply all properties.
+                     (dolist (pair prop-elements-alist)
+                       (let ((property (car pair))
+                             (elements (reverse (cdr pair))))
                          ;; Create one of:
-                         ;;    (face name-of-face) or
-                         ;;    (face (name-of-face name-of-face ...))
-                         (let ((state0 (if (cdr state)
-                                           state
-                                         (car state))))
-                           (set-text-properties 0 (length text)
-                                                (list 'face state0)
-                                                text)))
-                     (setq res (concat res text))
+                         ;;    (property element) or
+                         ;;    (property (element element ...))
+                         (when (eq (length elements) 1)
+                           ;; This ensures that non-face-like
+                           ;; properties are restored to their
+                           ;; original state.
+                           (setq elements (car elements)))
+                         (add-text-properties 0 (length text)
+                                              (list property elements)
+                                              text)))
+                     (with-current-buffer to-buffer
+                       (insert text))
                      (setq last-point (point))))
                (not (eobp)))
-        (if (equal (following-char) faceup-markup-start-char)
+        (if (eq (following-char) faceup-markup-start-char)
             ;; Start marker.
             (progn
               (forward-char)
-              (if (or (equal (following-char) faceup-markup-start-char)
-                      (equal (following-char) faceup-markup-end-char))
+              (if (or (eq (following-char) faceup-markup-start-char)
+                      (eq (following-char) faceup-markup-end-char))
                   ;; Escaped markup character.
                   (progn
                     (setq last-point (point))
                     (forward-char))
                 ;; Markup sequence.
-                (if (equal (following-char) ?:)
-                    ;; :face-name:
+                (let ((property faceup-default-property))
+                  (when (eq (following-char) ?\( )
+                    (forward-char)      ; "("
                     (let ((p (point)))
-                      (forward-char)
-                      (skip-chars-forward "^:")
-                      (unless (eobp)
-                        (forward-char))
-                      (push (intern (buffer-substring-no-properties
-                                     p (point)))
-                            state))
-                  ;; X:
-                  (push (car (rassoc (buffer-substring-no-properties
-                                      (point) (+ (point) 1))
-                                     faceup-face-short-alist))
-                        state)
-                  (forward-char 2))
+                      (forward-sexp)
+                      (setq property (intern (buffer-substring p (point)))))
+                    (forward-char))     ; ")"
+                  (let ((element
+                         (if (eq (following-char) ?:)
+                             ;; :element:
+                             (progn
+                               (forward-char)
+                               (prog1
+                                   (let ((p (point)))
+                                     (forward-sexp)
+                                     ;; Note: (read (current-buffer))
+                                     ;; doesn't work, as it reads more
+                                     ;; than a sexp.
+                                     (read (buffer-substring p (point))))
+                                 (forward-char)))
+                           ;; X:
+                           (prog1
+                               (car (rassoc (buffer-substring-no-properties
+                                             (point) (+ (point) 1))
+                                            faceup-face-short-alist))
+                             (forward-char 2)))))
+                    (push (cons property element) state)))
                 (setq last-point (point))))
           ;; End marker.
           (pop state)
           (forward-char)
-          (setq last-point (point))))
-      res)))
+          (setq last-point (point)))))))
 
 ;; ----------------------------------------------------------------------
 
@@ -556,22 +786,27 @@ If last character contains a face property, return `point-max'."
                      (make-string 1 faceup-markup-end-char))))
     (while (progn (skip-chars-forward not-markup)
                   (not (eobp)))
-      (if (equal (following-char) faceup-markup-end-char)
+      (if (eq (following-char) faceup-markup-end-char)
           ;; End markers are always on their own.
           (delete-char 1)
         ;; Start marker.
         (delete-char 1)
-        (if (or (equal (following-char) faceup-markup-start-char)
-                (equal (following-char) faceup-markup-end-char))
+        (if (or (eq (following-char) faceup-markup-start-char)
+                (eq (following-char) faceup-markup-end-char))
             ;; Escaped markup character, delete the escape and skip
             ;; the original character.
             (forward-char)
+          ;; Property name (if present)
+          (if (eq (following-char) ?\( )
+              (let ((p (point)))
+                (forward-sexp)
+                (delete-region p (point))))
           ;; Markup sequence.
-          (if (equal (following-char) ?:)
-              ;; :face-name:
+          (if (eq (following-char) ?:)
+              ;; :value:
               (let ((p (point)))
                 (forward-char)
-                (skip-chars-forward "^:")
+                (forward-sexp)
                 (unless (eobp)
                   (forward-char))
                 (delete-region p (point)))
@@ -732,7 +967,7 @@ compared with the original string."
 
 
 (defun faceup-test-font-lock-file (mode file)
-  "Verify that FILE is fontified as FILE.faceup for major mode MODE."
+  "Verify that FILE is fontified as `FILE.faceup' for major mode MODE."
   (let ((faceup (with-temp-buffer
                   (insert-file-contents (concat file ".faceup"))
                   (buffer-substring-no-properties (point-min) (point-max)))))

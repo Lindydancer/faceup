@@ -1,7 +1,7 @@
 # faceup - Regression test system for font-lock
 
 *Author:* Anders Lindgren<br>
-*Version:* 0.0.2<br>
+*Version:* 0.0.3<br>
 *URL:* [https://github.com/Lindydancer/faceup](https://github.com/Lindydancer/faceup)<br>
 
 Emacs is capable of highlighting buffers based on language-specific
@@ -110,38 +110,85 @@ file for the future.
 The Faceup markup language is designed to be human-readable and
 minimalistic.
 
-The two special characters `«` and `»` are used to indicate the
-start and end of a section containing a specific face. The start
-marker contains information about the face. A number of faces have
-a shorthand notation, e.g. `«U:abc»` means that the text "abc" is
-underlined. Other faces are expressed with their full name, e.g.
-`«:my-face:abc»`.
+The two special characters `«` and `»` marks the start and end of a
+range of a face.
 
-If more than one face is present at the same location, faceup
-represents this as nested marks, where the foremost face is the
-inner one, in the faceup representation.
+### Compact format for special faces
 
-For example, if the text `abcDEFghi` is in *warning* face and the
-`DEF` substring is *underlined*, this is represented as
-`«W:abc«U:DEF»ghi»`.
+The compact format `«<LETTER>:text»` is used for a number of common
+faces. For example, `«U:abc»` means that the text `abc` is
+underlined.
 
-In case the use of faces do not nest, the ranges will be split when
-represented in Faceup. Concretely, consider the string `abcdefghi`
-where `abcdef` are bold and `defghi` underlined. In case it will be
-represented in Faceup as `«B:abc«U:def»»«U:ghi»`
+See `faceup-face-short-alist` for the known faces and the
+corresponding letter.
 
-Any occurrence of the start or end markers in the original text will
-be "escaped" using the start marker in the `faceup` representation.
-In other words, the sequences `««` and `«»` represent a start and
-end marker, respectively.
+### Full format
 
-### Limitations
+The format `«:<NAME OF FACE>:text»` is used use to encode other
+faces.
 
-Faceup only supports the `face` attribute. (Some font-lock packages
-set other attributes like `help-echo`.)
+For example `«:my-special-face:abc»` meanst that `abc` has the face
+`my-special-face`.
 
-Faceup supports only named faces. It does not support face
-properties where colors or attributes are used directly.
+### Anonymous faces
+
+An "anonymous face" is when the `face` property contains a property
+list (plist) on the form `(:key value)`. This is represented using
+a variant of the full format: `«:(:key value):text»`.
+
+For example, `«:(:background "red"):abc»` represent the text `abc`
+with a red background.
+
+### Multiple properties
+
+In case a text contains more than one face property, they are
+represented using nested sections.
+
+For example:
+
+* `«B:abc«U:def»»` represent the text `abcdef` that is both *bold*
+  and *underlined*.
+* `«W:abc«U:def»ghi»` represent the text `abcdefghi` where the
+  entire text is in *warning* face and `def` is *underlined*.
+
+In case two faces partially overlap, the ranges will be split when
+represented in Faceup. For example:
+
+* `«B:abc«U:def»»«U:ghi»` represent the text `abcdefghi` where
+  `abcdef` is bold and `defghi` is underlined.
+
+### Escaping start and end markers
+
+Any occurrence of the start or end markers in the original text
+will be escaped using the start marker in the Faceup
+representation. In other words, the sequences `««` and `«»`
+represent a start and end marker, respectively.
+
+### Other properties
+
+In addition to representing the `face` property (or, more
+correctly, the value of `faceup-default-property`) other properties
+can be encoded. The variable `faceup-properties` contains a list of
+properties to track. If a property behaves like the `face`
+property, it is encoded as described above, with the addition of
+the property name placed in parentheses, for example:
+`«(my-face)U:abd»`.
+
+The variable `faceup-face-like-properties` contains a list of
+properties considered face-like.
+
+Properties that are not considered face-like are always encoded
+using the full format and the don't nest. For example:
+`«(my-fibonacci-property):(1 1 2 3 5 8):abd»`.
+
+Examples of properties that could be tracked are:
+
+* `font-lock-face` -- an alias to `face` when `font-lock-mode` is
+  enabled.
+* `syntax-table` -- used by a custom `syntax-propertize` to
+  override the default syntax table.
+* `help-echo` -- provides tooltip text displayed when the mouse is
+  held over a text.
 
 ## Reference section
 
@@ -153,13 +200,20 @@ current buffer.
 <kbd>M-x faceup-view-file RET</kbd> - view the current buffer converted to
 Faceup.
 
-`faceup-markup-{string,buffer}` - convert text with face properties
-to the Faceup markup language.
+`faceup-markup-{string,buffer}` - convert text with properties to
+the Faceup markup language.
 
-`faceup-render-{string,buffer,buffer-to-string}` - convert a text
-with Faceup markup to a text with face properties.
+`faceup-render-view-buffer` - convert buffer with Faceup markup to
+a buffer with real text properties and display it.
 
-`faceup-clean-{buffer,string}` - remove Faceup markup.
+`faceup-render-string` - return string with real text properties
+from a string with Faceup markup.
+
+`faceup-render-to-{buffer,string}` - convert buffer with Faceup
+markup to a buffer/string with real text properties.
+
+`faceup-clean-{buffer,string}` - remove Faceup markup from buffer
+or string.
 
 ### Regression test support
 
