@@ -1,9 +1,9 @@
 ;;; faceup.el --- Regression test system for font-lock
 
-;; Copyright (C) 2013-2015 Anders Lindgren
+;; Copyright (C) 2013-2017 Anders Lindgren
 
 ;; Author: Anders Lindgren
-;; Version: 0.0.3
+;; Version: 0.0.4
 ;; Created: 2013-01-21
 ;; Keywords: faces languages
 ;; URL: https://github.com/Lindydancer/faceup
@@ -24,25 +24,24 @@
 ;;; Commentary:
 
 ;; Emacs is capable of highlighting buffers based on language-specific
-;; `font-lock' rules. This package, `faceup', makes it possible to
-;; perform regression test for packages that provide font-lock rules.
+;; `font-lock' rules. This package makes it possible to perform
+;; regression test for packages that provide font-lock rules.
 ;;
 ;; The underlying idea is to convert text with highlights ("faces")
-;; into a plain text representation using the Faceup markup language.
-;; By comparing the current highlight with a highlight performed with
-;; earlier versions of a package, it's possible to find problems that
-;; otherwise would have been hard to spot.
+;; into a plain text representation using the Faceup markup
+;; language. This language is semi-human readable, for example:
 ;;
-;; The `faceup' package is designed to be used in conjunction with
-;; Ert, the standard Emacs regression test system.
+;;     «k:this» is a keyword
+;;
+;; By comparing the current highlight with a highlight performed with
+;; stable versions of a package, it's possible to automatically find
+;; problems that otherwise would have been hard to spot.
+;;
+;; This package is designed to be used in conjunction with Ert, the
+;; standard Emacs regression test system.
 ;;
 ;; The Faceup markup language is a generic markup language, regression
 ;; testing is merely one way to use it.
-
-;; Installation:
-;;
-;; This package is designed to be installed with the Emacs built-in
-;; package manager.
 
 ;; Regression test examples:
 ;;
@@ -76,7 +75,7 @@
 ;;      ;; ... Add more test files here ...
 ;;      )
 ;;
-;; To execute the tests simply run something like `M-x ert RET t RET'.
+;; To execute the tests, run something like `M-x ert RET t RET'.
 ;;
 ;;
 ;; Source snippets:
@@ -285,6 +284,71 @@
 ;;   highlight Objective-C function calls.
 ;;
 
+;; Other Font Lock Tools:
+;;
+;; This package is part of a suite of font-lock tools.  The other
+;; tools in the suite are:
+;;
+;;
+;; Font Lock Studio:
+;;
+;; Interactive debugger for font-lock keywords (Emacs syntax
+;; highlighting rules).
+;;
+;; Font Lock Studio lets you *single-step* Font Lock keywords --
+;; matchers, highlights, and anchored rules, so that you can see what
+;; happens when a buffer is fontified. You can set *breakpoints* on or
+;; inside rules and *run* until one has been hit. When inside a rule,
+;; matches are *visualized* using a palette of background colors. The
+;; *explainer* can describe a rule in plain-text English. Tight
+;; integration with *Edebug* allows you to step into Lisp expressions
+;; that are part of the Font Lock keywords.
+;;
+;;
+;; Font Lock Profiler:
+;;
+;; A profiler for font-lock keywords.  This package measures time and
+;; counts the number of times each part of a font-lock keyword is
+;; used.  For matchers, it counts the total number and the number of
+;; successful matches.
+;;
+;; The result is presented in table that can be sorted by count or
+;; time.  The table can be expanded to include each part of the
+;; font-lock keyword.
+;;
+;; In addition, this package can generate a log of all font-lock
+;; events.  This can be used to verify font-lock implementations,
+;; concretely, this is used for back-to-back tests of the real
+;; font-lock engine and Font Lock Studio, an interactive debugger for
+;; font-lock keywords.
+;;
+;;
+;; Highlight Refontification:
+;;
+;; Minor mode that visualizes how font-lock refontifies a buffer.
+;; This is useful when developing or debugging font-lock keywords,
+;; especially for keywords that span multiple lines.
+;;
+;; The background of the buffer is painted in a rainbow of colors,
+;; where each band in the rainbow represent a region of the buffer
+;; that has been refontified.  When the buffer is modified, the
+;; rainbow is updated.
+;;
+;;
+;; Font Lock Regression Suite:
+;;
+;; A collection of example source files for a large number of
+;; programming languages, with ERT tests to ensure that syntax
+;; highlighting does not accidentally change.
+;;
+;; For each source file, font-lock reference files are provided for
+;; various Emacs versions.  The reference files contains a plain-text
+;; representation of source file with syntax highlighting, using the
+;; format "faceup".
+;;
+;; Of course, the collection source file can be used for other kinds
+;; of testing, not limited to font-lock regression testing.
+
 ;;; Code:
 
 (eval-when-compile
@@ -392,11 +456,15 @@ When treated as a non-face-like property:
 
 
 ;;;###autoload
-(defun faceup-write-file (&optional file-name)
+(defun faceup-write-file (&optional file-name confirm)
   "Save the faceup representation of the current buffer to the file FILE-NAME.
 
 Unless a name is given, the file will be named xxx.faceup, where
-xxx is the file name associated with the buffer."
+xxx is the file name associated with the buffer.
+
+If optional second arg CONFIRM is non-nil, this function
+asks for confirmation before overwriting an existing file.
+Interactively, confirmation is required unless you supply a prefix argument."
   (interactive
    (let ((suggested-name (and (buffer-file-name)
                               (concat (buffer-file-name)
@@ -405,7 +473,8 @@ xxx is the file name associated with the buffer."
                            default-directory
                            suggested-name
                            nil
-                           (file-name-nondirectory suggested-name)))))
+                           (file-name-nondirectory suggested-name))
+           (not current-prefix-arg))))
   (unless file-name
     (setq file-name (concat (buffer-file-name) ".faceup")))
   (let ((buffer (current-buffer)))
@@ -420,7 +489,7 @@ xxx is the file name associated with the buffer."
       ;; function in the list change current buffer).
       (let ((require-final-newline nil)
             (window-size-change-functions '()))
-        (write-file file-name t)))))
+        (write-file file-name confirm)))))
 
 
 (defun faceup-markup-buffer ()
@@ -851,6 +920,7 @@ Test functions, like `faceup-test-font-lock-buffer', built on top
 of `faceup-test-equal', and other functions that adhere to this
 variable, can easily define their own explainer functions.")
 
+;;;###autoload
 (defmacro faceup-defexplainer (function)
   "Defines an Ert explainer function for FUNCTION.
 
@@ -939,11 +1009,17 @@ When used in an `ert' rule, the output is as below:
 If BUFFER is not specified the current buffer is used.
 
 Note that the major mode of the buffer is set to MODE and that
-the buffer is fontified."
+the buffer is fontified.
+
+If MODE is a list, the first element is the major mode, the
+remaining are additional functions to call, e.g. minor modes."
   (save-excursion
     (if buffer
         (set-buffer buffer))
-    (funcall mode)
+    (if (listp mode)
+        (dolist (m mode)
+          (funcall m))
+      (funcall mode))
     (font-lock-fontify-region (point-min) (point-max))
     (let ((result (faceup-markup-buffer)))
       (faceup-test-equal faceup result))))
@@ -966,10 +1042,14 @@ compared with the original string."
 (faceup-defexplainer faceup-test-font-lock-string)
 
 
-(defun faceup-test-font-lock-file (mode file)
-  "Verify that FILE is fontified as `FILE.faceup' for major mode MODE."
+(defun faceup-test-font-lock-file (mode file &optional faceup-file)
+  "Verify that FILE is fontified as FACEUP-FILE for major mode MODE.
+
+If FACEUP-FILE is omitted, FILE.faceup is used."
+  (unless faceup-file
+    (setq faceup-file (concat file ".faceup")))
   (let ((faceup (with-temp-buffer
-                  (insert-file-contents (concat file ".faceup"))
+                  (insert-file-contents faceup-file)
                   (buffer-substring-no-properties (point-min) (point-max)))))
     (with-temp-buffer
       (insert-file-contents file)
