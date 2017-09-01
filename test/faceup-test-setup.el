@@ -2,7 +2,7 @@
 
 ;;; Commentary:
 
-;; This package sets up a suitable enviroment for testing
+;; This package sets up a suitable environment for testing
 ;; faceup, and executes the tests.
 ;;
 ;; Usage:
