@@ -102,6 +102,18 @@
     (should (equal (faceup-markup-string s)
                    "AB«:(:bar nil):«:(:foo t):CD»»EF")))
   ;; ----------
+  ;; Anonymous face -- Nested.
+  ;;
+  ;;   AA
+  ;;  IIII
+  ;; ABCDEF
+  (let ((s "ABCDEF"))
+    (set-text-properties 1 2 '(face ((:foo t))) s)
+    (set-text-properties 2 4 '(face ((:bar t) (:foo t))) s)
+    (set-text-properties 4 5 '(face ((:foo t))) s)
+    (should (equal (faceup-markup-string s)
+                   "A«:(:foo t):B«:(:bar t):CD»E»F")))
+  ;; ----------
   ;; Nested properties.
   ;;
   ;;   UU
@@ -219,7 +231,6 @@
 
 (ert-deftest faceup-directory ()
   "Test `faceup-this-file-directory'."
-  (setq qqq default-directory)
   (let* ((dir (concat (file-name-directory
                        (symbol-file 'faceup-this-file-directory))
                       "test/"))

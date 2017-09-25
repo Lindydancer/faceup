@@ -2,6 +2,8 @@
 # Common tasks
 #
 
+require("../../../admin/rakehelper.rb")
+
 desc "Generate README.md"
 task "readme" do
   sh "emacs", "-batch",
